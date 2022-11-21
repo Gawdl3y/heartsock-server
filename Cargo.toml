@@ -1,0 +1,21 @@
+[package]
+name = "hrmws"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1"
+tracing = "0.1"
+clap = { version = "4", features = ["derive"] }
+tracing-subscriber = "0.3"
+tokio = { version = "1", features = ["full"] }
+ezsockets = { version = "0.3", features = ["tungstenite"] }
+local-ip-address = "0.4"
+# simple-mdns = "0.3"
+mdns-sd = "0.5"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
