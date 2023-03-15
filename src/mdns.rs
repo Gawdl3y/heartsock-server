@@ -23,7 +23,7 @@ pub fn advertise(port: u16, local_ip: Option<Ipv4Addr>) -> Result<(), String> {
 	}?;
 
 	// Create a daemon
-	let mdns = ServiceDaemon::new().expect("Failed to create daemon");
+	let mdns = ServiceDaemon::new().map_err(|err| format!("Failed to create daemon: {}", err))?;
 
 	// Create service info
 	let service_type = "_hrmws._tcp.local.";
