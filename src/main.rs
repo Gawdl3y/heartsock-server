@@ -12,6 +12,10 @@ struct Args {
 	#[arg(short, long, default_value_t = SocketAddr::from(([0, 0, 0, 0], 9001)))]
 	listen: SocketAddr,
 
+	/// Disables mDNS advertisement
+	#[arg(short, long)]
+	disable_mdns: bool,
+
 	/// IP to advertise (via mDNS) for connecting to
 	#[arg(short, long)]
 	advertise_ip: Option<Ipv4Addr>,
@@ -29,9 +33,11 @@ async fn main() -> Result<(), ezsockets::Error> {
 	tracing_subscriber::fmt().with_max_level(args.log_level).init();
 
 	// Advertise the server via MDNS
-	mdns::advertise(args.listen.port(), args.advertise_ip).unwrap_or_else(|err| {
-		tracing::error!("Unable to advertise via mDNS: {}", err);
-	});
+	if !args.disable_mdns {
+		mdns::advertise(args.listen.port(), args.advertise_ip).unwrap_or_else(|err| {
+			tracing::error!("Unable to advertise via mDNS: {}", err);
+		});
+	}
 
 	// Run the server
 	websocket::run(args.listen).await
