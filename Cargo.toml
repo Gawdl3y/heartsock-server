@@ -1,20 +1,26 @@
 [package]
-name = "hrmws"
+name = "heartsock-server"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["mdns-sd"]
+mdns-sd = ["dep:mdns-sd"]
+simple-mdns = ["dep:simple-mdns"]
 
 [dependencies]
 async-trait = "0.1"
 tracing = "0.1"
-clap = { version = "4", features = ["derive"] }
 tracing-subscriber = "0.3"
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
-ezsockets = { version = "0.3", features = ["tungstenite"] }
+ezsockets = { version = "0.5", features = ["tungstenite"] }
 local-ip-address = "0.4"
-# simple-mdns = "0.3"
-mdns-sd = "0.5"
+mdns-sd = { version = "0.7", optional = true }
+simple-mdns = { version = "0.4", features = ["async-tokio"], optional = true }
+cfg-if = "1"
 
 [profile.release]
 lto = "thin"

@@ -1,5 +1,6 @@
+use anyhow::{anyhow, Context, Result};
 use clap::{arg, command, Parser};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use tracing::metadata::LevelFilter;
 
 mod mdns;
@@ -13,12 +14,18 @@ struct Args {
 	listen: SocketAddr,
 
 	/// Disables mDNS advertisement
+	#[cfg(any(feature = "simple-mdns", feature = "mdns-sd"))]
 	#[arg(short, long)]
 	disable_mdns: bool,
 
 	/// IP to advertise (via mDNS) for connecting to
+	#[cfg(feature = "simple-mdns")]
 	#[arg(short, long)]
-	advertise_ip: Option<Ipv4Addr>,
+	advertise_ip: Option<std::net::IpAddr>,
+
+	#[cfg(feature = "mdns-sd")]
+	#[arg(short, long)]
+	advertise_ip: Option<std::net::Ipv4Addr>,
 
 	/// Max log level to output
 	#[arg(short = 'o', long, default_value_t = LevelFilter::INFO)]
@@ -26,19 +33,26 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), ezsockets::Error> {
+async fn main() -> Result<()> {
 	let args = Args::parse();
 
 	// Set up tracing
 	tracing_subscriber::fmt().with_max_level(args.log_level).init();
 
 	// Advertise the server via MDNS
-	if !args.disable_mdns {
-		mdns::advertise(args.listen.port(), args.advertise_ip).unwrap_or_else(|err| {
-			tracing::error!("Unable to advertise via mDNS: {}", err);
-		});
+	cfg_if::cfg_if! {
+		if #[cfg(any(feature = "simple-mdns", feature = "mdns-sd"))] {
+			if !args.disable_mdns {
+				mdns::advertise(args.listen.port(), args.advertise_ip)
+					.await
+					.unwrap_or_else(|err| tracing::error!("Unable to advertise via mDNS: {}", err));
+			}
+		}
 	}
 
 	// Run the server
-	websocket::run(args.listen).await
+	websocket::run(args.listen)
+		.await
+		.map_err(|err| anyhow!(err))
+		.with_context(|| format!("Failed to run WebSocket server on {}", args.listen))
 }
