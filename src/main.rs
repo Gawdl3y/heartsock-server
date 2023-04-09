@@ -23,6 +23,7 @@ struct Args {
 	#[arg(short, long)]
 	advertise_ip: Option<std::net::IpAddr>,
 
+	/// IP to advertise (via mDNS) for connecting to
 	#[cfg(feature = "mdns-sd")]
 	#[arg(short, long)]
 	advertise_ip: Option<std::net::Ipv4Addr>,
