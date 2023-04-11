@@ -106,6 +106,7 @@ impl ezsockets::ServerExt for HeartsockServer {
 				// Make this session the tracker if there isn't one
 				if self.tracker_id == 0 {
 					self.tracker_id = id;
+					tracing::info!("Session {} promoted to tracker", id);
 				}
 
 				// If there is already a tracker, make sure it's this session
@@ -119,6 +120,7 @@ impl ezsockets::ServerExt for HeartsockServer {
 
 					// Notify all other sessions of the change
 					if prev != val {
+						tracing::debug!("Value \"{}\" set to \"{}\" - notifying other sessions", key, val);
 						let sessions = self.sessions.iter().filter(|&(id, _)| *id != self.tracker_id);
 						for (_, session) in sessions {
 							session.text(format!("{}: {}", key, val));
