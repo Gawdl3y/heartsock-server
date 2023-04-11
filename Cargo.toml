@@ -2,11 +2,16 @@
 name = "heartsock-server"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [features]
 default = ["mdns-sd"]
 mdns-sd = ["dep:mdns-sd"]
 simple-mdns = ["dep:simple-mdns"]
+
+[package.metadata.winres]
+FileDescription = "Heartsock relay server for integration with the watch app and games/applications"
+ProductName = "Heartsock Server"
 
 [dependencies]
 async-trait = "0.1"
@@ -21,6 +26,9 @@ local-ip-address = "0.4"
 mdns-sd = { version = "0.7", optional = true }
 simple-mdns = { version = "0.4", features = ["async-tokio"], optional = true }
 cfg-if = "1"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
 
 [profile.release]
 lto = "thin"
