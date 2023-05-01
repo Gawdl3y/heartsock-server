@@ -153,7 +153,7 @@ impl HeartsockServer {
 	}
 
 	/// Retrieves the session with a specific ID
-	fn get_session(&self, id: &u32) -> Result<&Session<u32, Message>, &str> {
+	fn get_session(&self, id: &u32) -> Result<&Session<u32, Message>, &'static str> {
 		self.sessions.get(id).ok_or("unknown session ID")
 	}
 
