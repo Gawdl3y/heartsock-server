@@ -9,12 +9,12 @@ pub type SessionID = u32;
 /// Type to use for values
 pub type Value = u8;
 
+/// Key used for storing/retrieving the tracker value
+pub const KEY_TRACKER: &str = "tracker";
 /// Key used for storing/retrieving the BPM value
 pub const KEY_BPM: &str = "bpm";
 /// Key used for storing/retrieving the battery value
 pub const KEY_BATTERY: &str = "battery";
-/// Key used for storing/retrieving the tracker value
-pub const KEY_TRACKER: &str = "tracker";
 
 /// Message data to send from a server
 #[derive(Clone, Debug)]
@@ -251,9 +251,9 @@ where
 		latest_id: 0,
 		tracker_id: 0,
 		values: HashMap::from([
+			(KEY_TRACKER.to_owned(), 0),
 			(KEY_BPM.to_owned(), 0),
 			(KEY_BATTERY.to_owned(), 0),
-			(KEY_TRACKER.to_owned(), 0),
 		]),
 	});
 	ezsockets::tungstenite::run(server, address, |_socket| async move { Ok(()) }).await
