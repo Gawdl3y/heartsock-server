@@ -6,12 +6,22 @@ use tokio::net::ToSocketAddrs;
 /// Type to use for Session IDs
 pub type SessionID = u32;
 
+/// Type to use for values
+pub type Value = u8;
+
+/// Key used for storing/retrieving the BPM value
+pub const KEY_BPM: &str = "bpm";
+/// Key used for storing/retrieving the battery value
+pub const KEY_BATTERY: &str = "battery";
+/// Key used for storing/retrieving the tracker value
+pub const KEY_TRACKER: &str = "tracker";
+
 /// Message data to send from a server
 #[derive(Clone, Debug)]
 pub enum Message {
 	Ping { id: SessionID },
 	GetVal { id: SessionID, key: String },
-	SetVal { id: SessionID, key: String, val: u8 },
+	SetVal { id: SessionID, key: String, val: Value },
 }
 
 pub struct HeartsockServer {
@@ -24,7 +34,7 @@ pub struct HeartsockServer {
 	/// ID of the session that is the tracker
 	tracker_id: SessionID,
 	/// Current tracked values
-	values: HashMap<String, u8>,
+	values: HashMap<String, Value>,
 }
 
 #[async_trait]
@@ -69,18 +79,20 @@ impl ezsockets::ServerExt for HeartsockServer {
 		&mut self,
 		id: <Self::Session as ezsockets::SessionExt>::ID,
 	) -> Result<(), ezsockets::Error> {
-		// Reset the tracker ID if it's for the disconnected session
-		if id == self.tracker_id {
-			self.tracker_id = 0;
-		}
-
 		// Remove the session from the map
 		assert!(
 			self.sessions.remove(&id).is_some(),
 			"Disconnecting session not found in session map"
 		);
-
 		tracing::info!("Session {} removed for client disconnect", &id);
+
+		// Reset the tracker ID if it's for the disconnected session
+		if id == self.tracker_id {
+			tracing::info!("Tracker lost (disconnected session {} was the tracker)", &id);
+			self.tracker_id = 0;
+			self.set_val(KEY_TRACKER.to_owned(), 0);
+		}
+
 		Ok(())
 	}
 
@@ -88,51 +100,69 @@ impl ezsockets::ServerExt for HeartsockServer {
 	async fn on_call(&mut self, call: Self::Call) -> Result<(), ezsockets::Error> {
 		match call {
 			// ping -> pong
-			Message::Ping { id } => self
-				.sessions
-				.get(&id)
-				.ok_or("unknown session ID")?
-				.text("pong".to_owned()),
+			Message::Ping { id } => self.get_session(&id)?.text("pong".to_owned()),
 
-			Message::GetVal { id, key } => self.sessions.get(&id).ok_or("unknown session ID")?.text(format!(
-				"{}: {}",
-				key,
-				self.values.get(&key).expect("unknown value key")
-			)),
+			Message::GetVal { id, key } => self.get_session(&id)?.text(format!("{}: {}", key, self.get_val(&key))),
 
 			Message::SetVal { id, key, val } => {
-				let session = self.sessions.get(&id).ok_or("unknown session ID")?;
+				self.get_session(&id)?;
 
 				// Make this session the tracker if there isn't one
 				if self.tracker_id == 0 {
 					self.tracker_id = id;
 					tracing::info!("Session {} promoted to tracker", id);
+					self.set_val(KEY_TRACKER.to_owned(), 1);
 				}
 
 				// If there is already a tracker, make sure it's this session
 				if self.tracker_id == id {
 					// Update the value and respond
-					let prev = self
-						.values
-						.insert(key.clone(), val)
-						.unwrap_or_else(|| panic!("no old value for key {}", key));
-					session.text("ok".to_owned());
-
-					// Notify all other sessions of the change
-					if prev != val {
-						tracing::debug!("Value \"{}\" set to \"{}\" - notifying other sessions", key, val);
-						let sessions = self.sessions.iter().filter(|&(id, _)| *id != self.tracker_id);
-						for (_, session) in sessions {
-							session.text(format!("{}: {}", key, val));
-						}
-					}
+					self.set_val(key, val);
+					self.get_session(&id)?.text("ok".to_owned());
 				} else {
-					session.text("error: a tracker is already connected".to_owned());
+					self.get_session(&id)?
+						.text("error: a tracker is already connected".to_owned());
 				}
 			}
 		};
 
 		Ok(())
+	}
+}
+
+impl HeartsockServer {
+	fn get_val(&self, key: &String) -> &Value {
+		self.values.get(key).expect("unknown value key")
+	}
+
+	/// Sets a value and notifies all non-tracker sessions
+	fn set_val(&mut self, key: String, val: Value) -> Value {
+		// Set the value and save the old value
+		let prev = self
+			.values
+			.insert(key.clone(), val)
+			.unwrap_or_else(|| panic!("no old value for key {}", key));
+
+		// If the new value is actually different, notify all other sessions of the change
+		if prev != val {
+			tracing::debug!("Value \"{}\" changed to \"{}\" - notifying other sessions", key, val);
+			self.notify_sessions(key, val);
+		}
+
+		prev
+	}
+
+	/// Retrieves the session with a specific ID
+	fn get_session(&self, id: &u32) -> Result<&Session<u32, Message>, &str> {
+		self.sessions.get(id).ok_or("unknown session ID")
+	}
+
+	/// Notifies all non-tracker sessions of a value change
+	fn notify_sessions(&self, key: String, val: Value) {
+		let sessions = self.sessions.iter().filter(|&(id, _)| *id != self.tracker_id);
+		for (_, session) in sessions {
+			session.text(format!("{}: {}", key, val));
+		}
 	}
 }
 
@@ -166,8 +196,8 @@ impl ezsockets::SessionExt for HeartsockSession {
 				let parts: Vec<&str> = cmd.split_whitespace().collect();
 				let key = parts[1];
 
-				if matches!(key, "bpm" | "battery") {
-					let val = parts[2].parse::<u8>();
+				if matches!(key, KEY_BPM | KEY_BATTERY) {
+					let val = parts[2].parse::<Value>();
 					match val {
 						Ok(val) => self.server.call(Message::SetVal {
 							id: self.id,
@@ -220,7 +250,11 @@ where
 		handle,
 		latest_id: 0,
 		tracker_id: 0,
-		values: HashMap::from([("bpm".to_owned(), 0), ("battery".to_owned(), 0)]),
+		values: HashMap::from([
+			(KEY_BPM.to_owned(), 0),
+			(KEY_BATTERY.to_owned(), 0),
+			(KEY_TRACKER.to_owned(), 0),
+		]),
 	});
 	ezsockets::tungstenite::run(server, address, |_socket| async move { Ok(()) }).await
 }
