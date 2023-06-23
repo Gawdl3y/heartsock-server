@@ -230,7 +230,9 @@ impl ezsockets::SessionExt for HeartsockSession {
 
 	// Binary data received from client
 	async fn on_binary(&mut self, _bytes: Vec<u8>) -> Result<(), ezsockets::Error> {
-		unimplemented!()
+		tracing::debug!("Received binary data (unsupported) from session {}", self.id);
+		self.handle.text("error: binary data unsupported".to_owned());
+		Ok(())
 	}
 
 	// Unused
