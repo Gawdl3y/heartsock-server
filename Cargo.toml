@@ -10,7 +10,7 @@ mdns-sd = ["dep:mdns-sd"]
 simple-mdns = ["dep:simple-mdns"]
 
 [package.metadata.winres]
-FileDescription = "Heartsock relay server for integration with the watch app and games/applications"
+FileDescription = "Heartsock WebSocket Server"
 ProductName = "Heartsock Server"
 
 [dependencies]
