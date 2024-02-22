@@ -29,7 +29,7 @@ struct Args {
 	#[arg(short, long)]
 	advertise_ip: Option<std::net::Ipv4Addr>,
 
-	/// Directory to write plain text files in for each data type (HRM, battery)
+	/// Directory to write plain text files in for each value type (bpm, battery, tracker)
 	#[arg(short = 'D', long)]
 	data_dir: Option<std::path::PathBuf>,
 
