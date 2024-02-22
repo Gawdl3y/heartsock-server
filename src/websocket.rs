@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ezsockets::{Server, Session, Socket};
-use std::{collections::HashMap, fmt::Display, net::SocketAddr};
+use std::{collections::HashMap, fmt::Display, fs, net::SocketAddr, path::PathBuf};
 use tokio::net::ToSocketAddrs;
 
 /// Type to use for Session IDs
@@ -35,6 +35,8 @@ pub struct HeartsockServer {
 	tracker_id: SessionID,
 	/// Current tracked values
 	values: HashMap<String, Value>,
+	/// Directory to write value files to
+	data_dir: Option<PathBuf>,
 }
 
 #[async_trait]
@@ -143,10 +145,18 @@ impl HeartsockServer {
 			.insert(key.clone(), val)
 			.unwrap_or_else(|| panic!("no old value for key {}", key));
 
-		// If the new value is actually different, notify all other sessions of the change
+		// If the new value is actually different, notify all other sessions of the change and write to its file
 		if prev != val {
 			tracing::debug!("Value \"{}\" changed to \"{}\" - notifying other sessions", key, val);
-			self.notify_sessions(key, val);
+			self.notify_sessions(&key, val);
+
+			if let Some(data_dir) = &self.data_dir {
+				let path = data_dir.join(format!("{}.txt", key));
+				match fs::write(&path, val.to_string()) {
+					Ok(..) => tracing::debug!("Value written to {}", path.display()),
+					Err(err) => tracing::warn!("Unable to write value to {}: {}", path.display(), err),
+				};
+			}
 		}
 
 		prev
@@ -158,7 +168,7 @@ impl HeartsockServer {
 	}
 
 	/// Notifies all non-tracker sessions of a value change
-	fn notify_sessions(&self, key: String, val: Value) {
+	fn notify_sessions(&self, key: &str, val: Value) {
 		let sessions = self.sessions.iter().filter(|&(id, _)| *id != self.tracker_id);
 		for (_, session) in sessions {
 			session.text(format!("{}: {}", key, val));
@@ -242,7 +252,7 @@ impl ezsockets::SessionExt for HeartsockSession {
 }
 
 /// Create and run a Heartsock websocket server
-pub async fn run<A>(address: A) -> Result<(), ezsockets::Error>
+pub async fn run<A>(address: A, data_dir: Option<PathBuf>) -> Result<(), ezsockets::Error>
 where
 	A: ToSocketAddrs + Display,
 {
@@ -250,6 +260,7 @@ where
 	let (server, _) = ezsockets::Server::create(|handle| HeartsockServer {
 		sessions: HashMap::new(),
 		handle,
+		data_dir,
 		latest_id: 0,
 		tracker_id: 0,
 		values: HashMap::from([

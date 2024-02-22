@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{arg, command, Parser};
 use std::net::SocketAddr;
+use tokio::fs;
 use tracing::metadata::LevelFilter;
 
 mod mdns;
@@ -28,6 +29,10 @@ struct Args {
 	#[arg(short, long)]
 	advertise_ip: Option<std::net::Ipv4Addr>,
 
+	/// Directory to write plain text files in for each data type (HRM, battery)
+	#[arg(short = 'D', long)]
+	data_dir: Option<std::path::PathBuf>,
+
 	/// Max log level to output
 	#[arg(short = 'o', long, default_value_t = LevelFilter::INFO)]
 	log_level: LevelFilter,
@@ -39,6 +44,13 @@ async fn main() -> Result<()> {
 
 	// Set up tracing
 	tracing_subscriber::fmt().with_max_level(args.log_level).init();
+
+	// Create the data directory if it doesn't exist
+	if let Some(data_dir) = &args.data_dir {
+		fs::create_dir_all(data_dir)
+			.await
+			.context("Failed to create data directory")?;
+	}
 
 	// Advertise the server via MDNS
 	cfg_if::cfg_if! {
@@ -52,7 +64,7 @@ async fn main() -> Result<()> {
 	}
 
 	// Run the server
-	websocket::run(args.listen)
+	websocket::run(args.listen, args.data_dir)
 		.await
 		.map_err(|err| anyhow!(err))
 		.with_context(|| format!("Failed to run WebSocket server on {}", args.listen))
